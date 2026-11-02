@@ -19,6 +19,14 @@ runs locally on Docker Desktop with Kubernetes enabled.
      Prometheus · Grafana · Loki   ◀── metrics & logs ──   Vault ─▶ secrets   Gatekeeper ─▶ admission policy
 ```
 
+## Screenshots
+
+| Jobs UI | Grafana: metrics + Loki logs |
+|---|---|
+| ![Jobs UI](docs/screenshots/1-app-jobs.png) | ![Grafana dashboard](docs/screenshots/4-grafana-dashboard.png) |
+| **Input validation** | **Prometheus targets** |
+| ![Validation](docs/screenshots/2-app-validation-error.png) | ![Prometheus targets](docs/screenshots/5-prometheus-targets.png) |
+
 ## The application
 
 | Service | Stack | What it does |
