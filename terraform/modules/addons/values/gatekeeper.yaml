@@ -1,0 +1,4 @@
+replicas: 1
+auditInterval: 60
+constraintViolationsLimit: 50
+exemptNamespaces: [kube-system, gatekeeper-system]

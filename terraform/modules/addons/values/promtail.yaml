@@ -1,0 +1,10 @@
+config:
+  clients:
+    - url: http://loki-gateway.monitoring.svc/loki/api/v1/push
+  snippets:
+    pipelineStages:
+      - cri: {}
+      - json:
+          expressions: { level: level, service: service, job_id: job_id }
+      - labels: { level: "", service: "" }
+      - structured_metadata: { job_id: "" }

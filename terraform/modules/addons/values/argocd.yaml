@@ -1,0 +1,26 @@
+configs:
+  params:
+    server.insecure: true          # TLS terminates at the ingress (local only)
+  cm:
+    timeout.reconciliation: 60s
+    resource.customizations.health.argoproj.io_Rollout: |
+      hs = {}
+      if obj.status ~= nil and obj.status.phase ~= nil then
+        if obj.status.phase == "Healthy" then hs.status = "Healthy"
+        elseif obj.status.phase == "Paused" then hs.status = "Suspended"
+        elseif obj.status.phase == "Degraded" then hs.status = "Degraded"
+        else hs.status = "Progressing" end
+        hs.message = obj.status.message
+        return hs
+      end
+      hs.status = "Progressing"
+      return hs
+server:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: argocd.localtest.me
+  metrics: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: kube-prometheus-stack } } }
+controller:
+  metrics: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: kube-prometheus-stack } } }
+dex: { enabled: false }

@@ -1,0 +1,26 @@
+# Picked up by kube-prometheus-stack (serviceMonitorSelector matches release=kube-prometheus-stack).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jobs-api
+  labels: { release: kube-prometheus-stack }
+spec:
+  selector: { matchLabels: { app.kubernetes.io/name: api } }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      relabelings:
+        # Expose the Argo Rollouts pod-template hash so canary analysis can compare
+        # the new ReplicaSet against the stable one.
+        - sourceLabels: [__meta_kubernetes_pod_label_rollouts_pod_template_hash]
+          targetLabel: rollouts_pod_template_hash
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jobs-worker
+  labels: { release: kube-prometheus-stack }
+spec:
+  selector: { matchLabels: { app.kubernetes.io/name: worker } }
+  endpoints: [{ port: metrics, interval: 15s }]

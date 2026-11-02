@@ -1,0 +1,64 @@
+# CANARY: shift traffic to the new version in steps while Prometheus analysis
+# watches its error rate and latency. Any failed analysis aborts and rolls back.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: api
+  labels: { app.kubernetes.io/name: api, app.kubernetes.io/component: api }
+spec:
+  replicas: 5
+  revisionHistoryLimit: 3
+  selector: { matchLabels: { app.kubernetes.io/name: api } }
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      analysis:                       # background analysis for the whole rollout
+        templates: [{ templateName: api-success-rate }]
+        startingStep: 1
+        args:
+          - name: canary-hash
+            valueFrom: { podTemplateHashValue: Latest }
+          - name: namespace
+            valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+      steps:
+        - setWeight: 20               # 1 of 5 pods
+        - pause: { duration: 2m }
+        - analysis:                   # inline gate: latency must also be healthy
+            templates: [{ templateName: api-latency }]
+            args:
+              - name: canary-hash
+                valueFrom: { podTemplateHashValue: Latest }
+              - name: namespace
+                valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+        - setWeight: 40
+        - pause: { duration: 2m }
+        - setWeight: 60
+        - pause: { duration: 2m }
+        - setWeight: 80
+        - pause: { duration: 1m }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api, app.kubernetes.io/component: api }
+    spec:
+      serviceAccountName: jobs-app
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: api } } }
+      containers:
+        - name: api
+          image: localhost:5000/jobs-api:0.0.0
+          envFrom: [{ configMapRef: { name: app-config } }]
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: jobs-db-credentials, key: database_url } } }
+            - { name: ENVIRONMENT, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
+          ports: [{ name: http, containerPort: 8000 }]
+          startupProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 2, failureThreshold: 30 }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]

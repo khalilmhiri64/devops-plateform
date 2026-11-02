@@ -1,0 +1,7 @@
+# Shared Trivy settings used by Jenkins and `make scan`.
+severity: [HIGH, CRITICAL]
+exit-code: 1
+ignore-unfixed: true
+scan:
+  scanners: [vuln, secret, misconfig]
+format: table

@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jobs-production
+resources: [../../base]
+components: [../../components/rollouts]
+labels:
+  - pairs: { app.kubernetes.io/environment: production }
+    includeSelectors: false
+patches:
+  - target: { kind: VaultAuth, name: jobs-vault-auth }
+    patch: |-
+      - { op: replace, path: /spec/kubernetes/role, value: jobs-app-jobs-production }
+  - target: { kind: VaultStaticSecret, name: jobs-db-credentials }
+    patch: |-
+      - { op: replace, path: /spec/path, value: jobs-production/jobs-platform/database }
+      - { op: add, path: /spec/rolloutRestartTargets/-, value: { kind: argo.Rollout, name: api } }
+  - target: { kind: Ingress, name: jobs }
+    patch: |-
+      - { op: replace, path: /spec/rules/0/host, value: jobs.localtest.me }
+  - target: { kind: Deployment, name: worker }
+    patch: |-
+      - { op: replace, path: /spec/replicas, value: 3 }
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |-
+      - { op: replace, path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage, value: 5Gi }
+# Bumped by scripts/gitops-bump.sh from the Jenkins pipeline (tag builds only).
+images:
+  - name: localhost:5000/jobs-api
+    newTag: 0.1.0
+  - name: localhost:5000/jobs-worker
+    newTag: 0.1.0
+  - name: localhost:5000/jobs-frontend
+    newTag: 0.1.0

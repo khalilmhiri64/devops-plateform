@@ -1,0 +1,2 @@
+gitops_repo_url = "https://github.com/your-org/devops-platform.git"
+kube_context    = "docker-desktop"

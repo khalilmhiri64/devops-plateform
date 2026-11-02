@@ -1,0 +1,16 @@
+configuration-as-code
+workflow-aggregator
+git
+github-branch-source
+docker-workflow
+pipeline-utility-steps
+pipeline-stage-view
+junit
+htmlpublisher
+coverage
+timestamper
+ansicolor
+credentials-binding
+kubernetes-cli
+job-dsl
+blueocean

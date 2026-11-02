@@ -1,0 +1,39 @@
+# Scoped to application namespaces only (label set by Terraform).
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata: { name: workloads-must-have-name-label }
+spec:
+  enforcementAction: deny
+  match:
+    kinds: [{ apiGroups: [apps, argoproj.io], kinds: [Deployment, StatefulSet, Rollout] }]
+    namespaceSelector: { matchLabels: { jobs-platform/managed: "true" } }
+  parameters: { labels: [app.kubernetes.io/name, app.kubernetes.io/part-of] }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sContainerLimits
+metadata: { name: pods-must-have-limits }
+spec:
+  enforcementAction: deny
+  match:
+    kinds: [{ apiGroups: [""], kinds: [Pod] }]
+    namespaceSelector: { matchLabels: { jobs-platform/managed: "true" } }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata: { name: pods-from-allowed-repos }
+spec:
+  enforcementAction: deny
+  match:
+    kinds: [{ apiGroups: [""], kinds: [Pod] }]
+    namespaceSelector: { matchLabels: { jobs-platform/managed: "true" } }
+  parameters:
+    repos: ["localhost:5000/", "postgres:", "redis:", "curlimages/curl:"]
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockLatest
+metadata: { name: pods-no-latest-tag }
+spec:
+  enforcementAction: deny
+  match:
+    kinds: [{ apiGroups: [""], kinds: [Pod] }]
+    namespaceSelector: { matchLabels: { jobs-platform/managed: "true" } }

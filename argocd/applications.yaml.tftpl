@@ -1,0 +1,59 @@
+# Rendered by Terraform (terraform/main.tf -> helm_release.argocd_apps).
+# ${repo_url} and ${revision} are filled in from terraform variables.
+projects:
+  jobs-platform:
+    namespace: argocd
+    description: Jobs Platform workloads and policies
+    sourceRepos: ["${repo_url}"]
+    destinations:
+      - { namespace: jobs-staging, server: https://kubernetes.default.svc }
+      - { namespace: jobs-production, server: https://kubernetes.default.svc }
+      - { namespace: gatekeeper-system, server: https://kubernetes.default.svc }
+    clusterResourceWhitelist:
+      - { group: templates.gatekeeper.sh, kind: ConstraintTemplate }
+      - { group: constraints.gatekeeper.sh, kind: "*" }
+    namespaceResourceBlacklist:
+      - { group: "", kind: ResourceQuota }      # owned by Terraform
+      - { group: "", kind: LimitRange }
+    orphanedResources: { warn: true }
+    roles:
+      - name: ci
+        description: Jenkins may sync but not delete applications
+        policies:
+          - p, proj:jobs-platform:ci, applications, get, jobs-platform/*, allow
+          - p, proj:jobs-platform:ci, applications, sync, jobs-platform/*, allow
+
+applications:
+  platform-policies:
+    namespace: argocd
+    project: jobs-platform
+    source: { repoURL: "${repo_url}", targetRevision: "${revision}", path: security/gatekeeper }
+    destination: { server: https://kubernetes.default.svc, namespace: gatekeeper-system }
+    syncPolicy:
+      automated: { prune: true, selfHeal: true }
+      syncOptions: [SkipDryRunOnMissingResource=true]
+      retry: { limit: 5, backoff: { duration: 10s, factor: 2, maxDuration: 3m } }
+
+  jobs-staging:
+    namespace: argocd
+    project: jobs-platform
+    annotations: { argocd.argoproj.io/sync-wave: "1" }
+    source: { repoURL: "${repo_url}", targetRevision: "${revision}", path: k8s/overlays/staging }
+    destination: { server: https://kubernetes.default.svc, namespace: jobs-staging }
+    syncPolicy:
+      automated: { prune: true, selfHeal: true }   # every merge to main deploys
+      retry: { limit: 5, backoff: { duration: 10s, factor: 2, maxDuration: 3m } }
+
+  jobs-production:
+    namespace: argocd
+    project: jobs-platform
+    annotations: { argocd.argoproj.io/sync-wave: "2" }
+    source: { repoURL: "${repo_url}", targetRevision: "${revision}", path: k8s/overlays/production }
+    destination: { server: https://kubernetes.default.svc, namespace: jobs-production }
+    syncPolicy:
+      # Auto-sync is safe here: the image tag only changes after the Jenkins approval
+      # gate, and Argo Rollouts then controls the canary / blue-green progression.
+      automated: { prune: false, selfHeal: true }
+      retry: { limit: 3, backoff: { duration: 30s, factor: 2, maxDuration: 5m } }
+    ignoreDifferences:
+      - { group: argoproj.io, kind: Rollout, jsonPointers: [/spec/replicas] }   # owned by the HPA

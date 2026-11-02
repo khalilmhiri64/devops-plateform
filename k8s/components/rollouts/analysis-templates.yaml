@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata: { name: api-success-rate }
+spec:
+  args: [{ name: canary-hash }, { name: namespace }]
+  metrics:
+    - name: success-rate
+      interval: 1m
+      count: 0              # run for the whole rollout (background)
+      failureLimit: 2
+      successCondition: len(result) == 0 || isNaN(result[0]) || result[0] >= 0.95
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+          query: |
+            sum(rate(http_requests_total{namespace="{{args.namespace}}",rollouts_pod_template_hash="{{args.canary-hash}}",status!~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total{namespace="{{args.namespace}}",rollouts_pod_template_hash="{{args.canary-hash}}"}[2m]))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata: { name: api-latency }
+spec:
+  args: [{ name: canary-hash }, { name: namespace }]
+  metrics:
+    - name: p95-latency
+      interval: 30s
+      count: 4
+      failureLimit: 1
+      successCondition: len(result) == 0 || isNaN(result[0]) || result[0] < 0.5
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+          query: |
+            histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{args.namespace}}",rollouts_pod_template_hash="{{args.canary-hash}}"}[2m])))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata: { name: frontend-smoke }
+spec:
+  metrics:
+    - name: preview-healthy
+      count: 3
+      interval: 10s
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                securityContext: { runAsNonRoot: true, runAsUser: 65534, seccompProfile: { type: RuntimeDefault } }
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    args: ["-fsS", "--max-time", "5", "http://frontend-preview/healthz"]
+                    resources:
+                      requests: { cpu: 10m, memory: 16Mi }
+                      limits: { cpu: 100m, memory: 32Mi }
+                    securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }

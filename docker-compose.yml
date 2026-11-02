@@ -1,0 +1,155 @@
+# Local development stack. See docs/network-addressing.md for the subnet plan.
+name: jobs
+
+x-logging: &default-logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3", tag: "{{.Name}}" }
+
+services:
+  # ---------------------------------------------------------------- data tier
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobs-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-jobs}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+    networks: { data: { ipv4_address: 172.28.2.10 } }
+    logging: *default-logging
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    networks: { data: { ipv4_address: 172.28.2.11 } }
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- app tier
+  api:
+    build: { context: services/api, target: runtime, args: { VERSION: "${VERSION:-dev}" } }
+    image: jobs/api:${VERSION:-dev}
+    environment:
+      ENVIRONMENT: local
+      APP_VERSION: ${VERSION:-dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jobs}:${POSTGRES_PASSWORD:-jobs-local-only}@postgres:5432/${POSTGRES_DB:-jobs}
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      app: { ipv4_address: 172.28.1.20 }
+      data: { ipv4_address: 172.28.2.20 }
+    logging: *default-logging
+
+  worker:
+    build: { context: services/worker, target: runtime, args: { VERSION: "${VERSION:-dev}" } }
+    image: jobs/worker:${VERSION:-dev}
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jobs}:${POSTGRES_PASSWORD:-jobs-local-only}@postgres:5432/${POSTGRES_DB:-jobs}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      api: { condition: service_healthy }   # API owns the schema
+    deploy: { replicas: 2 }
+    networks: [app, data]
+    logging: *default-logging
+
+  frontend:
+    build: { context: services/frontend, args: { VERSION: "${VERSION:-dev}" } }
+    image: jobs/frontend:${VERSION:-dev}
+    environment:
+      API_UPSTREAM: http://api:8000
+      DNS_RESOLVER: 127.0.0.11
+    ports: ["8080:8080"]
+    depends_on:
+      api: { condition: service_healthy }
+    networks: { app: { ipv4_address: 172.28.1.10 } }
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- observability
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d", "--web.enable-lifecycle"]
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - promdata:/prometheus
+    ports: ["9090:9090"]
+    networks:
+      app: {}
+      observability: { ipv4_address: 172.28.3.10 }
+    profiles: [observability, full]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports: ["3000:3000"]
+    depends_on: [prometheus, loki]
+    networks: { observability: { ipv4_address: 172.28.3.11 } }
+    profiles: [observability, full]
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes: ["./monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro", "lokidata:/loki"]
+    ports: ["3100:3100"]
+    networks: { observability: { ipv4_address: 172.28.3.12 } }
+    profiles: [observability, full]
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./monitoring/promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+    networks: [observability]
+    profiles: [observability, full]
+
+  # ---------------------------------------------------------------- security
+  vault:
+    image: hashicorp/vault:1.18
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-root-local-only}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports: ["8200:8200"]
+    networks: { data: { ipv4_address: 172.28.2.30 } }
+    profiles: [security, full]
+
+  # ---------------------------------------------------------------- CI
+  jenkins:
+    build: { context: jenkins }
+    image: jobs/jenkins:local
+    user: root   # needs the docker socket to build images
+    environment:
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc.yaml
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false
+    volumes:
+      - jenkinsdata:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.kube:/root/.kube:ro
+    ports: ["8081:8080", "50000:50000"]
+    networks: { ci: { ipv4_address: 172.28.4.10 } }
+    profiles: [ci, full]
+
+networks:
+  app:           { ipam: { config: [{ subnet: 172.28.1.0/24 }] } }
+  data:          { internal: true, ipam: { config: [{ subnet: 172.28.2.0/24 }] } }
+  observability: { ipam: { config: [{ subnet: 172.28.3.0/24 }] } }
+  ci:            { ipam: { config: [{ subnet: 172.28.4.0/24 }] } }
+
+volumes: { pgdata: {}, redisdata: {}, promdata: {}, grafanadata: {}, lokidata: {}, jenkinsdata: {} }

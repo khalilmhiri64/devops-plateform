@@ -1,0 +1,60 @@
+# Test infrastructure layered on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test up -d
+services:
+  selenium-hub:
+    image: selenium/hub:4.27.0
+    ports: ["4444:4444"]
+    networks: { app: { ipv4_address: 172.28.1.100 } }
+    profiles: [test]
+
+  chrome:
+    image: selenium/node-chrome:4.27.0
+    shm_size: 2gb
+    environment:
+      SE_EVENT_BUS_HOST: selenium-hub
+      SE_EVENT_BUS_PUBLISH_PORT: 4442
+      SE_EVENT_BUS_SUBSCRIBE_PORT: 4443
+      SE_NODE_MAX_SESSIONS: 2
+    depends_on: [selenium-hub]
+    networks: [app]
+    profiles: [test]
+
+  firefox:
+    image: selenium/node-firefox:4.27.0
+    shm_size: 2gb
+    environment:
+      SE_EVENT_BUS_HOST: selenium-hub
+      SE_EVENT_BUS_PUBLISH_PORT: 4442
+      SE_EVENT_BUS_SUBSCRIBE_PORT: 4443
+    depends_on: [selenium-hub]
+    networks: [app]
+    profiles: [test]
+
+  e2e:
+    build: tests/e2e
+    environment:
+      BASE_URL: http://frontend:8080
+      SELENIUM_URL: http://selenium-hub:4444/wd/hub
+      BROWSER: ${BROWSER:-chrome}
+    volumes: ["./reports/e2e:/reports"]
+    depends_on: [selenium-hub, chrome, frontend]
+    networks: [app]
+    profiles: [test]
+
+  integration:
+    build: { context: services/api, target: test }
+    command: ["pytest", "-m", "integration", "--junitxml=/reports/junit.xml"]
+    environment: { API_URL: "http://api:8000" }
+    volumes: ["./reports/integration:/reports"]
+    depends_on: [api, worker]
+    networks: [app]
+    profiles: [test]
+
+  k6:
+    image: grafana/k6:0.55.0
+    environment: { BASE_URL: "http://api:8000" }
+    volumes: ["./tests/performance:/scripts:ro", "./reports/perf:/reports"]
+    entrypoint: ["k6"]
+    command: ["run", "--summary-export=/reports/summary.json", "/scripts/smoke.js"]
+    networks: [app]
+    profiles: [test]

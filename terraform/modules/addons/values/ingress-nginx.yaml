@@ -1,0 +1,9 @@
+controller:
+  # Docker Desktop exposes LoadBalancer services on localhost.
+  service: { type: LoadBalancer }
+  metrics:
+    enabled: true
+    serviceMonitor: { enabled: true, additionalLabels: { release: kube-prometheus-stack } }
+  config:
+    enable-real-ip: "true"
+    log-format-escape-json: "true"

@@ -1,0 +1,44 @@
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts: [prometheus.localtest.me]
+  prometheusSpec:
+    retention: 7d
+    # Pick up ServiceMonitors from every namespace that carry release=kube-prometheus-stack.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+
+grafana:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts: [grafana.localtest.me]
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki-gateway.monitoring.svc
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: jobs-platform
+          folder: Jobs Platform
+          type: file
+          options: { path: /var/lib/grafana/dashboards/jobs-platform }
+  dashboards:
+    jobs-platform:
+      jobs-overview:
+        json: |
+          ${dashboard_json}
+
+additionalPrometheusRulesMap:
+  jobs-platform:
+    groups:
+        ${alert_rules}
+
+alertmanager:
+  alertmanagerSpec:
+    resources: { requests: { cpu: 10m, memory: 32Mi } }

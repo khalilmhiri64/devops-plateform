@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jobs Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Jobs Platform</h1>
+    <span id="version" data-testid="version">…</span>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Submit a job</h2>
+      <form id="job-form" data-testid="job-form">
+        <label for="job-type">Job type</label>
+        <select id="job-type" name="type" data-testid="job-type">
+          <option value="wordcount">Word count</option>
+          <option value="reverse">Reverse text</option>
+          <option value="fibonacci">Fibonacci (n)</option>
+          <option value="prime_check">Prime check (n)</option>
+        </select>
+        <label for="job-input" id="job-input-label">Text</label>
+        <input id="job-input" name="input" data-testid="job-input" autocomplete="off" required>
+        <button type="submit" data-testid="submit-btn">Submit</button>
+        <p id="form-error" class="error" data-testid="form-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2>Recent jobs</h2>
+        <div id="stats" data-testid="stats"></div>
+      </div>
+      <table>
+        <thead><tr><th>Type</th><th>Input</th><th>Status</th><th>Result</th><th></th></tr></thead>
+        <tbody id="jobs-body" data-testid="jobs-table"></tbody>
+      </table>
+      <p id="empty" data-testid="empty-state">No jobs yet.</p>
+    </section>
+  </main>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

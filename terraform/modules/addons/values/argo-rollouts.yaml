@@ -1,0 +1,8 @@
+dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts: [rollouts.localtest.me]
+controller:
+  metrics: { enabled: true, serviceMonitor: { enabled: true, additionalLabels: { release: kube-prometheus-stack } } }

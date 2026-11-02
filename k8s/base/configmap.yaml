@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  LOG_LEVEL: INFO
+  REDIS_URL: redis://redis:6379/0
+  QUEUE_NAME: jobs:queue
+  DB_HOST: postgres
+  DB_NAME: jobs

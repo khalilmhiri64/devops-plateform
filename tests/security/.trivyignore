@@ -1,0 +1,2 @@
+# Accepted risks. Every entry needs an owner, a reason and an expiry date.
+# CVE-XXXX-YYYY  exp:2027-01-01  owner:platform  reason:no fix available upstream

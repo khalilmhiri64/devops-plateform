@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: jobs-platform
+    folder: Jobs Platform
+    type: file
+    options: { path: /var/lib/grafana/dashboards }

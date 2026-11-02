@@ -1,0 +1,9 @@
+# Dev mode: in-memory, auto-unsealed, single root token. NEVER use outside a laptop.
+server:
+  dev: { enabled: true }
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts: [{ host: vault.localtest.me, paths: [/] }]
+injector: { enabled: false }   # we use the Vault Secrets Operator instead
+ui: { enabled: true }

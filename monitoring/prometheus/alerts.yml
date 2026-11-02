@@ -1,0 +1,45 @@
+groups:
+  - name: jobs-platform
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "API 5xx rate above 5%"
+          runbook: docs/runbooks/high-error-rate.md
+
+      - alert: ApiHighLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "API p95 latency above 500ms"
+          runbook: docs/runbooks/high-latency.md
+
+      - alert: QueueBacklog
+        expr: max(jobs_queue_depth) > 100
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 100 jobs waiting"
+          runbook: docs/runbooks/queue-backlog.md
+
+      - alert: WorkerFailureRate
+        expr: |
+          sum(rate(worker_jobs_processed_total{outcome="failed"}[10m]))
+            / clamp_min(sum(rate(worker_jobs_processed_total[10m])), 1e-9) > 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 10% of jobs failing"
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} target {{ $labels.instance }} is down"
+          runbook: docs/runbooks/service-down.md
